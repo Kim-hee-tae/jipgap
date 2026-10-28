@@ -43,7 +43,7 @@ function runUpdate(reason, args = []) {
   console.log(`[update] 시작 (${reason})`);
   updating.on('exit', (code) => {
     updating = null;
-    state.data.lastRun = { startedAt, endedAt: new Date().toISOString(), ok: code === 0, reason, log: logTail };
+    state.data.lastRun = { startedAt, endedAt: new Date().toISOString(), ok: code === 0, reason, realTried: Boolean((process.env.MOLIT_KEY || '').trim()), log: logTail };
     state.save();
     if (code === 0) loadModel();
   });
@@ -54,6 +54,12 @@ function runUpdate(reason, args = []) {
 function maybeUpdate() {
   const kstHour = (new Date().getUTCHours() + 9) % 24;
   if (!model) return runUpdate('처음 실행 — 데이터 없음');
+  // 키를 넣었는데 아직 데모 화면이면 기다리지 않고 바로 수집 (키가 아직 활성화 전이면 1시간마다 다시 시도)
+  if (model.demo && (process.env.MOLIT_KEY || '').trim()) {
+    const last = state.data.lastRun ? Date.parse(state.data.lastRun.startedAt) : 0;
+    if (!state.data.lastRun || !state.data.lastRun.realTried || Date.now() - last > 60 * 60 * 1000) return runUpdate('인증키 확인 — 실데이터로 전환');
+    return false;
+  }
   if (state.data.lastRunDate !== kstDate() && kstHour >= UPDATE_HOUR) return runUpdate('매일 갱신');
   return false;
 }
