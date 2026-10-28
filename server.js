@@ -109,7 +109,7 @@ app.get('/api/region/:code', (req, res) => {
   const scoreSrc = r.level === 'dong' ? model.regions[r.parent] : r;
   res.set('Cache-Control', 'public, max-age=120');
   res.json({
-    meta: { demo: model.demo, months: model.months, ref: model.ref, refYm: model.refYm, builtAt: model.builtAt, bands: model.bands, sources: model.sources },
+    meta: { demo: model.demo, collecting: Boolean(model.demo && (process.env.MOLIT_KEY || '').trim()), months: model.months, ref: model.ref, refYm: model.refYm, builtAt: model.builtAt, bands: model.bands, sources: model.sources },
     region: { ...r, children: undefined }, parents, children,
     scores: scoreSrc && { from: scoreSrc.code, name: scoreSrc.name, cats: scoreSrc.cats, indicators: scoreSrc.indicators, total: scoreSrc.total, totalLabel: scoreSrc.totalLabel, totalHistory: scoreSrc.totalHistory, totalChanged: scoreSrc.totalChanged, good: scoreSrc.good, bad: scoreSrc.bad },
     band, apts: aptsFor(r, band),

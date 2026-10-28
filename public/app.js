@@ -143,6 +143,9 @@
     const d = S.data, r = d.region;
     document.title = `${r.full} · 집값 점수판`;
     $('#demoBar').hidden = !d.meta.demo;
+    $('#demoBar').textContent = d.meta.collecting
+      ? '실거래가를 받아 오는 중이에요 — 끝나면 실제 시세로 바뀌어요. 지금 보이는 건 데모 데이터예요.'
+      : '데모 데이터예요 — 실제 시세가 아니에요. 공공데이터 인증키를 넣으면 실거래가로 바뀌어요.';
     const tab = r.level === 'dong' ? 'sgg' : r.level;
     document.querySelectorAll('.tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
     $('#back').hidden = !d.parents.length;
