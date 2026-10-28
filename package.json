@@ -1,0 +1,16 @@
+{
+  "name": "jipgap",
+  "version": "1.0.0",
+  "private": true,
+  "description": "집값 점수판 — 실거래가로 보는 지역별 상승률과 수요·공급·시황 점수",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "update": "node scripts/update.js",
+    "demo": "node scripts/update.js --demo",
+    "build": "node scripts/update.js --build",
+    "test": "node scripts/test.js"
+  },
+  "engines": { "node": ">=22" },
+  "dependencies": { "express": "^4.21.2" }
+}

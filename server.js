@@ -1,0 +1,117 @@
+// 집값 점수판 — 실거래가로 보는 지역별 상승률·수요/공급/시황 점수
+// kairu-kit: 자동 새로고침(version), JSON 저장(json-store), 서비스 워커
+const path = require('path');
+const http = require('http');
+const fs = require('fs');
+const { fork } = require('child_process');
+const express = require('express');
+const { mountVersion, sendIndex } = require('./kit/server/version');
+const { createStore } = require('./kit/server/json-store');
+const { DATA, readJson, kstDate } = require('./lib/util');
+const { MODEL_FILE } = require('./lib/build');
+
+const PORT = Number(process.env.PORT) || 3020;
+const HOST = process.env.HOST || '0.0.0.0';
+const UPDATE_HOUR = Number(process.env.UPDATE_HOUR ?? 6); // 매일 06시(한국 시간) 이후 첫 확인 때 갱신
+
+// ── 데이터 (model.json 을 메모리에) ──
+let model = null;
+let searchList = [];
+function loadModel() {
+  const m = readJson(MODEL_FILE);
+  if (!m || !m.regions) return false;
+  model = m;
+  searchList = Object.values(m.regions)
+    .filter((r) => r.level !== 'dong' || r.trades6m >= 3)
+    .map((r) => ({ code: r.code, name: r.name, full: r.full, level: r.level }));
+  console.log(`[model] ${m.demo ? '데모' : '실데이터'} · 기준월 ${m.refYm} · 지역 ${searchList.length}곳`);
+  return true;
+}
+loadModel();
+
+// ── 하루 한 번 갱신 (자식 프로세스: 서버 메모리와 분리) ──
+const state = createStore(path.join(DATA, 'state.json'), { lastRunDate: null, lastRun: null });
+let updating = null;
+function runUpdate(reason, args = []) {
+  if (updating) return false;
+  const startedAt = new Date().toISOString();
+  const logTail = [];
+  updating = fork(path.join(__dirname, 'scripts/update.js'), args, { silent: true, execArgv: ['--max-old-space-size=450'] });
+  const keep = (d) => { for (const l of String(d).split('\n').filter(Boolean)) { console.log(l); logTail.push(l); if (logTail.length > 30) logTail.shift(); } };
+  updating.stdout.on('data', keep);
+  updating.stderr.on('data', keep);
+  console.log(`[update] 시작 (${reason})`);
+  updating.on('exit', (code) => {
+    updating = null;
+    state.data.lastRun = { startedAt, endedAt: new Date().toISOString(), ok: code === 0, reason, log: logTail };
+    state.save();
+    if (code === 0) loadModel();
+  });
+  state.data.lastRunDate = kstDate();
+  state.save();
+  return true;
+}
+function maybeUpdate() {
+  const kstHour = (new Date().getUTCHours() + 9) % 24;
+  if (!model) return runUpdate('처음 실행 — 데이터 없음');
+  if (state.data.lastRunDate !== kstDate() && kstHour >= UPDATE_HOUR) return runUpdate('매일 갱신');
+  return false;
+}
+setTimeout(maybeUpdate, 2000);
+setInterval(maybeUpdate, 10 * 60 * 1000);
+
+// ── 앱 ──
+const app = express();
+app.disable('x-powered-by');
+app.use(express.json({ limit: '16kb' }));
+app.use('/kit', express.static(path.join(__dirname, 'kit/client')));
+const version = mountVersion(app);
+app.get(['/', '/index.html'], (req, res) => sendIndex(res, path.join(__dirname, 'public/index.html'), version));
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/api/status', (req, res) => res.json({
+  ok: true, ready: Boolean(model), demo: model ? model.demo : null, refYm: model?.refYm || null,
+  builtAt: model?.builtAt || null, updating: Boolean(updating), lastRun: state.data.lastRun && { ...state.data.lastRun, log: undefined },
+}));
+
+const need = (res) => { if (!model) { res.status(503).json({ error: '데이터를 준비하고 있어요. 1~2분 뒤 다시 열어 주세요.', preparing: true }); return false; } return true; };
+
+app.get('/api/regions', (req, res) => {
+  if (!need(res)) return;
+  res.set('Cache-Control', 'public, max-age=300');
+  res.json({ regions: searchList });
+});
+
+// 하위 지역 요약 (트리맵·순위용)
+const childSummary = (c) => ({ code: c.code, name: c.name, level: c.level, change: c.change, pppNow: c.pppNow, pppPast: c.pppPast, trades6m: c.trades6m, nApts: c.nApts });
+
+function aptsFor(r, band) {
+  if (r.level === 'nation' || r.level === 'sido') return model.topApts[r.code]?.[band] || [];
+  const sgg = r.level === 'sgg' ? r.code : r.parent;
+  return (model.aptsBySgg[sgg] || []).filter((a) => a.band === band && (r.level === 'sgg' || a.dong === r.code)).slice(0, 30);
+}
+
+app.get('/api/region/:code', (req, res) => {
+  if (!need(res)) return;
+  const r = model.regions[req.params.code];
+  if (!r) return res.status(404).json({ error: '없는 지역이에요' });
+  const band = model.bands.includes(req.query.band) ? req.query.band : '30평대';
+  const parents = [];
+  for (let p = model.regions[r.parent]; p; p = model.regions[p.parent]) parents.unshift({ code: p.code, name: p.name, level: p.level });
+  const children = r.children.map((c) => model.regions[c]).filter((c) => c && c.change !== null && c.trades6m >= 3).map(childSummary).sort((a, b) => b.change - a.change);
+  // 동은 점수가 없으니 시군구 점수를 보여 준다
+  const scoreSrc = r.level === 'dong' ? model.regions[r.parent] : r;
+  res.set('Cache-Control', 'public, max-age=120');
+  res.json({
+    meta: { demo: model.demo, months: model.months, ref: model.ref, refYm: model.refYm, builtAt: model.builtAt, bands: model.bands, sources: model.sources },
+    region: { ...r, children: undefined }, parents, children,
+    scores: scoreSrc && { from: scoreSrc.code, name: scoreSrc.name, cats: scoreSrc.cats, indicators: scoreSrc.indicators, total: scoreSrc.total, totalLabel: scoreSrc.totalLabel, totalHistory: scoreSrc.totalHistory, totalChanged: scoreSrc.totalChanged, good: scoreSrc.good, bad: scoreSrc.bad },
+    band, apts: aptsFor(r, band),
+  });
+});
+
+app.use('/api', (req, res) => res.status(404).json({ error: '없는 주소예요' }));
+
+const server = http.createServer(app);
+server.listen(PORT, HOST, () => console.log(`집값 점수판 → http://localhost:${PORT}`));
+module.exports = { app, server };

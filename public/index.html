@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="app-version" content="__APP_VERSION__">
+  <meta name="theme-color" content="#ffffff">
+  <title>집값 점수판</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="demoBar" class="demo-bar" hidden>데모 데이터예요 — 실제 시세가 아니에요. 공공데이터 인증키를 넣으면 실거래가로 바뀌어요.</div>
+
+  <header class="top">
+    <div class="top-row">
+      <button id="back" class="icon-btn" aria-label="상위 지역으로" hidden>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <nav id="crumbs" class="crumbs" aria-label="지역 경로"></nav>
+      <button id="star" class="icon-btn star" aria-label="관심 지역에 추가" aria-pressed="false">☆</button>
+    </div>
+    <div class="tabs" role="tablist">
+      <button role="tab" data-tab="nation">전국</button>
+      <button role="tab" data-tab="sido">시도</button>
+      <button role="tab" data-tab="sgg">시군구</button>
+    </div>
+    <div class="search">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input id="q" type="search" placeholder="지역 검색 (예: 강남구, 분당구, 대치동)" autocomplete="off" aria-label="지역 검색">
+      <ul id="suggest" class="suggest" role="listbox" hidden></ul>
+    </div>
+    <div id="favs" class="favs"></div>
+  </header>
+
+  <main id="main" class="grid">
+    <div class="loading">불러오는 중…</div>
+  </main>
+
+  <footer class="foot">
+    <p id="footInfo"></p>
+    <p>자료: 국토교통부 아파트 매매·전월세 실거래가, 한국은행 ECOS(금리), 통계청 KOSIS(미분양). 평당가는 전용면적 3.3㎡ 기준이에요.
+      점수는 각 지표의 지금 값이 과거 기록에서 어느 위치인지로 매긴 참고용이며, 투자 권유가 아니에요.</p>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+  <script src="/kit/kit.js" data-prefix="jipgap:"></script>
+  <script src="/kit/favorites.js"></script>
+  <script src="/kit/push.js"></script>
+  <script src="/kit/auto-update.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
