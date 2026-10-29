@@ -143,3 +143,5 @@ button { font: inherit; color: inherit; cursor: pointer; }
 
 .foot { max-width: 1320px; margin: 0 auto; padding: 8px 16px 40px; color: var(--faint); font-size: 12px; }
 .foot p { margin: 4px 0; }
+.meta .last { color: var(--text); font-weight: 600; }
+.rank .meta { white-space: normal; overflow: visible; }

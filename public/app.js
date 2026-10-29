@@ -292,13 +292,14 @@
         <li>
           ${medal(i)}
           <div><div class="nm">${r.level === 'nation' || r.level === 'sido' ? `<span class="tag">${esc(regionName(a.sgg))}</span>` : ''}${esc(a.umd)} ${esc(a.name)}</div>
-            <div class="meta">전용 ${a.area}㎡${a.built ? ` · ${now - a.built + 1}년차` : ''} · 거래 1년 전 ${a.nPast}건 · 최근 ${a.nRec}건</div></div>
+            <div class="meta">전용 ${a.area}㎡${a.built ? ` · ${now - a.built + 1}년차` : ''} · 거래 1년 전 ${a.nPast}건 · 최근 ${a.nRec}건</div>
+            ${a.last ? `<div class="meta">최근 실거래 <b class="last">${fmtEok(a.last.price)}</b> (${a.last.ym.slice(2, 4)}.${a.last.ym.slice(4)}${a.last.day ? `.${String(a.last.day).padStart(2, '0')}` : ''}${a.last.floor !== null && a.last.floor !== undefined ? ` · ${a.last.floor}층` : ''})</div>` : ''}</div>
           <div class="right"><div class="flow">${fmtEok(a.pricePast)} → ${fmtEok(a.price)}</div>
             <div class="pct ${dir(a.change)}">${fmtPct(a.change, 0)} (${fmtEok(Math.abs(a.price - a.pricePast))}) ${a.change >= 0 ? '상승' : '하락'}</div></div>
         </li>`).join('')}</ol>
         ${list.length > n ? `<button class="more" data-more="apts">${list.length - n}곳 더 보기</button>` : ''}`
         : `<p class="empty-card">이 평형대는 1년 전과 비교할 거래가 부족해요. 다른 평형대를 골라 보세요.</p>`}
-      <p class="note">금액은 각 기간 실거래 중앙값이에요. 층·향에 따라 실제 시세와 다를 수 있어요.</p>
+      <p class="note">금액은 각 기간(최근 6개월 / 1년 전 6개월) 마지막 거래 3건의 중앙값이에요. 층·향에 따라 실제 시세와 다를 수 있어요.</p>
     </section>`;
   }
   function regionName(code) { const r = S.regions.find((x) => x.code === code); return r ? r.full.replace(/^\S+\s/, '') : code; }
