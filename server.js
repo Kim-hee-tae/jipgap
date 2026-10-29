@@ -32,6 +32,7 @@ loadModel();
 // ── 하루 한 번 갱신 (자식 프로세스: 서버 메모리와 분리) ──
 const state = createStore(path.join(DATA, 'state.json'), { lastRunDate: null, lastRun: null });
 let updating = null;
+let triedSinceBoot = false; // 재시작(배포) 직후엔 1시간 기다리지 않고 바로 다시 시도
 function runUpdate(reason, args = []) {
   if (updating) return false;
   const startedAt = new Date().toISOString();
@@ -57,7 +58,10 @@ function maybeUpdate() {
   // 키를 넣었는데 아직 데모 화면이면 기다리지 않고 바로 수집 (키가 아직 활성화 전이면 1시간마다 다시 시도)
   if (model.demo && (process.env.MOLIT_KEY || '').trim()) {
     const last = state.data.lastRun ? Date.parse(state.data.lastRun.startedAt) : 0;
-    if (!state.data.lastRun || !state.data.lastRun.realTried || Date.now() - last > 60 * 60 * 1000) return runUpdate('인증키 확인 — 실데이터로 전환');
+    if (!triedSinceBoot || !state.data.lastRun || !state.data.lastRun.realTried || Date.now() - last > 60 * 60 * 1000) {
+      triedSinceBoot = true;
+      return runUpdate('인증키 확인 — 실데이터로 전환');
+    }
     return false;
   }
   if (state.data.lastRunDate !== kstDate() && kstHour >= UPDATE_HOUR) return runUpdate('매일 갱신');
