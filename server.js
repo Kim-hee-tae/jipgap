@@ -8,7 +8,7 @@ const express = require('express');
 const { mountVersion, sendIndex } = require('./kit/server/version');
 const { createStore } = require('./kit/server/json-store');
 const { DATA, readJson, kstDate } = require('./lib/util');
-const { MODEL_FILE } = require('./lib/build');
+const { MODEL_FILE, BUILD_VER } = require('./lib/build');
 
 const PORT = Number(process.env.PORT) || 3020;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -32,6 +32,7 @@ loadModel();
 // ── 하루 한 번 갱신 (자식 프로세스: 서버 메모리와 분리) ──
 const state = createStore(path.join(DATA, 'state.json'), { lastRunDate: null, lastRun: null });
 let updating = null;
+let rebuiltSinceBoot = false; // 계산 방식이 바뀐 배포 뒤 한 번만 다시 집계
 let triedSinceBoot = false; // 재시작(배포) 직후엔 1시간 기다리지 않고 바로 다시 시도
 function runUpdate(reason, args = []) {
   if (updating) return false;
@@ -48,7 +49,7 @@ function runUpdate(reason, args = []) {
     state.save();
     if (code === 0) loadModel();
   });
-  state.data.lastRunDate = kstDate();
+  if (!args.includes('--build')) state.data.lastRunDate = kstDate(); // 다시 집계만 할 땐 매일 수집 일정에 영향 없음
   state.save();
   return true;
 }
@@ -63,6 +64,10 @@ function maybeUpdate() {
       return runUpdate('인증키 확인 — 실데이터로 전환');
     }
     return false;
+  }
+  if (!model.demo && model.buildVer !== BUILD_VER && !rebuiltSinceBoot) {
+    rebuiltSinceBoot = true;
+    return runUpdate('계산 방식 변경 — 받아 둔 데이터로 다시 집계', ['--build']);
   }
   if (state.data.lastRunDate !== kstDate() && kstHour >= UPDATE_HOUR) return runUpdate('매일 갱신');
   return false;

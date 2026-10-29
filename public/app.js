@@ -292,7 +292,7 @@
         <li>
           ${medal(i)}
           <div><div class="nm">${r.level === 'nation' || r.level === 'sido' ? `<span class="tag">${esc(regionName(a.sgg))}</span>` : ''}${esc(a.umd)} ${esc(a.name)}</div>
-            <div class="meta">전용 ${a.area}㎡${a.built ? ` · ${now - a.built + 1}년차` : ''} · 최근 거래 ${a.nRec}건</div></div>
+            <div class="meta">전용 ${a.area}㎡${a.built ? ` · ${now - a.built + 1}년차` : ''} · 거래 1년 전 ${a.nPast}건 · 최근 ${a.nRec}건</div></div>
           <div class="right"><div class="flow">${fmtEok(a.pricePast)} → ${fmtEok(a.price)}</div>
             <div class="pct ${dir(a.change)}">${fmtPct(a.change, 0)} (${fmtEok(Math.abs(a.price - a.pricePast))}) ${a.change >= 0 ? '상승' : '하락'}</div></div>
         </li>`).join('')}</ol>
