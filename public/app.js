@@ -14,11 +14,16 @@
   const charts = [];
 
   // ── 숫자 표시 ──
+  // 만원 → "4억 4,000" / "10억" / "9,500만" (네이버 부동산 표기)
   const fmtEok = (v) => {
-    if (v === null || v === undefined) return '-';
-    if (Math.abs(v) >= 10000) { const e = v / 10000; return `${e >= 100 ? Math.round(e) : e.toFixed(1).replace(/\.0$/, '')}억`; }
-    return `${Math.round(v).toLocaleString()}만`;
+    if (v === null || v === undefined || !Number.isFinite(v)) return '-';
+    const n = Math.round(Math.abs(v)), sign = v < 0 ? '-' : '';
+    const eok = Math.floor(n / 10000), man = n % 10000;
+    if (!eok) return `${sign}${man.toLocaleString()}만`;
+    return `${sign}${eok}억${man ? ` ${man.toLocaleString()}` : ''}`;
   };
+  // 등기·직거래 표시
+  const tradeBadges = (t) => (t ? `${t.rgst ? `<span class="badge reg" title="등기일 ${esc(t.rgst)}">등기</span>` : ''}${t.direct ? '<span class="badge direct" title="중개사 없이 직접 거래">직거래</span>' : ''}` : '');
   const fmtPpp = (v) => {
     if (v === null || v === undefined) return '-';
     if (v >= 10000) return `${(v / 10000).toFixed(2).replace(/0$/, '').replace(/\.0$/, '')}억`;
@@ -293,7 +298,7 @@
           ${medal(i)}
           <div><div class="nm">${r.level === 'nation' || r.level === 'sido' ? `<span class="tag">${esc(regionName(a.sgg))}</span>` : ''}${esc(a.umd)} ${esc(a.name)}</div>
             <div class="meta">전용 ${a.area}㎡${a.built ? ` · ${now - a.built + 1}년차` : ''} · 거래 1년 전 ${a.nPast}건 · 최근 ${a.nRec}건</div>
-            ${a.last ? `<div class="meta">최근 실거래 <b class="last">${fmtEok(a.last.price)}</b> (${a.last.ym.slice(2, 4)}.${a.last.ym.slice(4)}${a.last.day ? `.${String(a.last.day).padStart(2, '0')}` : ''}${a.last.floor !== null && a.last.floor !== undefined ? ` · ${a.last.floor}층` : ''})</div>` : ''}</div>
+            ${a.last ? `<div class="meta">최근 실거래 <b class="last">${fmtEok(a.last.price)}</b> (${a.last.ym.slice(2, 4)}.${a.last.ym.slice(4)}${a.last.day ? `.${String(a.last.day).padStart(2, '0')}` : ''}${a.last.floor !== null && a.last.floor !== undefined ? ` · ${a.last.floor}층` : ''}) ${tradeBadges(a.last)}</div>` : ''}</div>
           <div class="right"><div class="flow">${fmtEok(a.pricePast)} → ${fmtEok(a.price)}</div>
             <div class="pct ${dir(a.change)}">${fmtPct(a.change, 0)} (${fmtEok(Math.abs(a.price - a.pricePast))}) ${a.change >= 0 ? '상승' : '하락'}</div></div>
         </li>`).join('')}</ol>
@@ -450,18 +455,19 @@
     $('#aptInfo').innerHTML = `
       <div class="band-chips" role="group" aria-label="평형대">${bands.map((b) => `<button data-band="${esc(b)}" aria-pressed="${b === A.band}">${b}</button>`).join('')}</div>
       <div class="apt-summary">
-        <div><small>최근 실거래</small><b>${last ? fmtEok(last.price) : '-'}</b><small>${last ? `${ymd(last)} · ${last.floor ?? '-'}층` : ''}</small></div>
+        <div><small>최근 실거래</small><b>${last ? fmtEok(last.price) : '-'}</b><small>${last ? `${ymd(last)} · ${last.floor ?? '-'}층` : ''}</small>${last ? `<small>${tradeBadges(last)}</small>` : ''}</div>
         <div><small>최근 1년 최고</small><b>${max1 ? fmtEok(max1.price) : '-'}</b><small>${max1 ? ymd(max1) : '거래 없음'}</small></div>
         <div><small>최근 1년 거래</small><b>${y1.length}건</b><small>전체 ${list.length}건</small></div>
       </div>
       <div id="aptChart" class="chart small" role="img" aria-label="실거래가 추이"></div>
       <table class="trades">
         <thead><tr><th>계약일</th><th>전용면적</th><th class="num">층</th><th class="num">거래금액</th></tr></thead>
-        <tbody>${list.slice(0, n).map((t) => `<tr><td>${ymd(t)}</td><td>${t.area}㎡ <span class="meta">${t.band}</span></td><td class="num">${t.floor ?? '-'}</td><td class="num"><b>${fmtEok(t.price)}</b></td></tr>`).join('')}</tbody>
+        <tbody>${list.slice(0, n).map((t) => `<tr><td>${ymd(t)}</td><td>${t.area}㎡ <span class="meta">${t.band}</span></td><td class="num">${t.floor ?? '-'}</td><td class="num"><b>${fmtEok(t.price)}</b><div class="badges">${tradeBadges(t)}</div></td></tr>`).join('')}</tbody>
       </table>
       ${list.length > n ? `<button class="more" data-apt-more>${list.length - n}건 더 보기</button>` : ''}
       ${d.total > d.trades.length ? `<p class="note">최근 ${d.trades.length}건까지만 보여요.</p>` : ''}
-      <p class="note">자료: 국토교통부 아파트 매매 실거래가 (해제된 거래 제외)</p>`;
+      <p class="note">${d.trades.some((t) => t.direct) ? '차트의 빈 점은 직거래예요. ' : ''}등기는 소유권 이전 등기까지 마친 거래예요. 자료: 국토교통부 아파트 매매 실거래가 (해제된 거래 제외)</p>
+      ${d.trades.some((t) => !t.known) ? '<p class="note">등기·직거래 표시는 다시 받은 거래부터 보여요 (며칠 안에 모두 채워져요).</p>' : ''}`;
     drawAptChart(list);
   }
   function drawAptChart(list) {
@@ -475,12 +481,15 @@
     A.chart.setOption({
       grid: { left: 44, right: 10, top: 28, bottom: 26 },
       legend: { top: 0, left: 0, itemWidth: 10, itemHeight: 10, textStyle: { color: css('--sub'), fontSize: 12 } },
-      tooltip: { trigger: 'item', formatter: (p) => { const t = p.data.t; return `${ymd(t)} · 전용 ${t.area}㎡ · ${t.floor ?? '-'}층<br><b>${fmtEok(t.price)}</b>`; } },
+      tooltip: { trigger: 'item', formatter: (p) => { const t = p.data.t; return `${ymd(t)} · 전용 ${t.area}㎡ · ${t.floor ?? '-'}층<br><b>${fmtEok(t.price)}</b>${t.direct ? ' · 직거래' : ''}${t.rgst ? ` · 등기 ${esc(t.rgst)}` : ''}`; } },
       xAxis: { type: 'time', axisLabel: { color: css('--faint'), fontSize: 11 }, axisLine: { lineStyle: { color: css('--line') } }, splitLine: { show: false } },
       yAxis: { type: 'value', scale: true, axisLabel: { color: css('--faint'), fontSize: 11, formatter: (v) => `${v}억` }, splitLine: { lineStyle: { color: css('--line') } } },
       series: Object.entries(groups).map(([band, ts]) => ({
         name: band, type: 'scatter', symbolSize: 7, itemStyle: { color: COLORS[band] || '#3182f6', opacity: 0.85 },
-        data: ts.map((t) => ({ value: [new Date(+t.ym.slice(0, 4), +t.ym.slice(4) - 1, t.day || 15), Math.round(t.price / 100) / 100], t })),
+        data: ts.map((t) => ({
+          value: [new Date(+t.ym.slice(0, 4), +t.ym.slice(4) - 1, t.day || 15), Math.round(t.price / 100) / 100], t,
+          ...(t.direct ? { itemStyle: { color: 'transparent', borderColor: COLORS[band] || '#3182f6', borderWidth: 1.5 } } : {}),
+        })),
       })),
     });
   }

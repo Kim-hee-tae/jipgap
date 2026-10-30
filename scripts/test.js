@@ -10,7 +10,9 @@ const { compact } = require('../lib/molit');
 
 (async () => {
   // API 응답 변환
-  assert.deepStrictEqual(compact('trade', { dealDay: '3', umdNm: ' 대치동', aptNm: '테스트', aptSeq: '1', excluUseAr: '84.97', dealAmount: '250,000', floor: '7', buildYear: '2015' }), [3, '대치동', '테스트', '1', 84.97, 250000, 7, 2015, '']);
+  assert.deepStrictEqual(compact('trade', { dealDay: '3', umdNm: ' 대치동', aptNm: '테스트', aptSeq: '1', excluUseAr: '84.97', dealAmount: '250,000', floor: '7', buildYear: '2015' }), [3, '대치동', '테스트', '1', 84.97, 250000, 7, 2015, '', '', '']);
+  assert.strictEqual(compact('trade', { dealAmount: '1', excluUseAr: '59', dealingGbn: '직거래', rgstDate: '26.09.30' })[9], '직');
+  assert.strictEqual(compact('trade', { dealAmount: '1', excluUseAr: '59', dealingGbn: '중개거래', rgstDate: '26.09.30' })[10], '26.09.30');
   assert.strictEqual(compact('trade', { dealAmount: '1,000', excluUseAr: '59', cdealType: 'O' }), null, '해제 거래는 빠져야 함');
   assert.strictEqual(compact('rent', { deposit: '50,000', monthlyRent: '0', excluUseAr: '84' })[6], 0);
 
@@ -54,6 +56,7 @@ const { compact } = require('../lib/molit');
   assert.strictEqual(d.status, 200);
   assert(d.body.trades.length > 0 && d.body.geo && d.body.geo.lat, '단지 거래·위치');
   assert(d.body.trades.every((t, i, arr) => i === 0 || arr[i - 1].ym >= t.ym), '최신순');
+  assert(d.body.trades.some((t) => t.rgst) && d.body.trades.every((t) => typeof t.direct === 'boolean'), '등기·직거래 필드');
   assert.strictEqual((await get('/api/apt?sgg=11470&id=없는단지')).status, 404);
   assert.strictEqual((await get('/api/apt?sgg=abc&id=x')).status, 400);
   const loader = await fetch('http://127.0.0.1:3098/tmap-loader.js').then((x) => x.text());

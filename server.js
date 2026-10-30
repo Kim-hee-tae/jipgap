@@ -147,7 +147,7 @@ function sggRows(sgg) {
   if (sggCache.size > 12) sggCache.delete(sggCache.keys().next().value);
   return rows;
 }
-// rows: [월, 일, 법정동, 단지명, 단지ID, 전용㎡, 금액, 층, 건축년도, 지번]
+// rows: [월, 일, 법정동, 단지명, 단지ID, 전용㎡, 금액, 층, 건축년도, 지번, 거래구분, 등기일자]
 app.get('/api/apt', async (req, res) => {
   if (!need(res)) return;
   const sgg = String(req.query.sgg || ''), id = String(req.query.id || '').slice(0, 120);
@@ -164,7 +164,7 @@ app.get('/api/apt', async (req, res) => {
   res.set('Cache-Control', 'private, max-age=300');
   res.json({
     demo: model.demo, apt, geo: pos, mapKey: geo.enabled(),
-    trades: rows.slice(0, 600).map((r) => ({ ym: r[0], day: r[1], area: r[5], price: r[6], floor: r[7], band: bandOf(r[5]) })),
+    trades: rows.slice(0, 600).map((r) => ({ ym: r[0], day: r[1], area: r[5], price: r[6], floor: r[7], band: bandOf(r[5]), direct: r[10] === '직', rgst: r[11] || null, known: Boolean(r[10]) })),
     total: rows.length,
   });
 });

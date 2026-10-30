@@ -173,3 +173,13 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .trades td { padding: 9px 4px; border-bottom: 1px solid var(--line); }
 .trades td.num, .trades th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .apt-label { background: var(--text); color: var(--panel); font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 8px; white-space: nowrap; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
+
+/* 등기·직거래 */
+.badge { display: inline-block; font-size: 11px; font-weight: 600; line-height: 1; padding: 3px 5px; border-radius: 5px; margin-left: 3px; vertical-align: 1px; white-space: nowrap; }
+.badge.reg { background: var(--down-soft); color: var(--down); }
+.badge.direct { background: #fff4e5; color: #c25e00; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .badge.direct { background: #3a2a14; color: #f2a65a; } }
+:root[data-theme="dark"] .badge.direct { background: #3a2a14; color: #f2a65a; }
+.trades .badges { margin-top: 2px; }
+.trades .badges:empty { display: none; }
+.apt-summary small .badge { margin: 4px 1px 0; }
