@@ -10,6 +10,7 @@
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
   <link rel="stylesheet" href="/style.css">
+  <script src="/tmap-loader.js"></script>
 </head>
 <body>
   <div id="demoBar" class="demo-bar" hidden>데모 데이터예요 — 실제 시세가 아니에요. 공공데이터 인증키를 넣으면 실거래가로 바뀌어요.</div>
@@ -38,6 +39,19 @@
   <main id="main" class="grid">
     <div class="loading">불러오는 중…</div>
   </main>
+
+  <div id="aptSheet" class="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="aptTitle">
+    <div class="sheet-panel">
+      <div class="sheet-head">
+        <div class="sheet-title"><h2 id="aptTitle"></h2><p id="aptAddr" class="meta"></p></div>
+        <button id="aptClose" class="icon-btn" aria-label="닫기">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <div class="apt-map-wrap"><div id="aptMap" class="apt-map"></div><p id="aptMapMsg" class="apt-map-msg" hidden></p></div>
+      <div id="aptInfo" class="apt-info"></div>
+    </div>
+  </div>
 
   <footer class="foot">
     <p id="footInfo"></p>

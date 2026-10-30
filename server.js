@@ -8,7 +8,10 @@ const express = require('express');
 const { mountVersion, sendIndex } = require('./kit/server/version');
 const { createStore } = require('./kit/server/json-store');
 const { DATA, readJson, kstDate } = require('./lib/util');
-const { MODEL_FILE, BUILD_VER } = require('./lib/build');
+const { MODEL_FILE, BUILD_VER, bandOf } = require('./lib/build');
+const molit = require('./lib/molit');
+const { DEMO_ROOT } = require('./lib/demo');
+const geo = require('./lib/geo');
 
 const PORT = Number(process.env.PORT) || 3020;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -82,6 +85,13 @@ app.use(express.json({ limit: '16kb' }));
 app.use('/kit', express.static(path.join(__dirname, 'kit/client')));
 const version = mountVersion(app);
 app.get(['/', '/index.html'], (req, res) => sendIndex(res, path.join(__dirname, 'public/index.html'), version));
+// 티맵 지도 SDK 로더 — 키는 서버 .env 에만 두고 여기서 붙인다 (SDK 가 document.write 를 써서 head 에서 동기로 불러야 함)
+app.get('/tmap-loader.js', (req, res) => {
+  res.set('Cache-Control', 'no-cache').type('application/javascript');
+  const k = geo.appKey();
+  if (!k) return res.send('window.TMAP_OFF = true;');
+  res.send(`document.write(${JSON.stringify(`<script src="https://apis.openapi.sk.com/tmap/jsv2?version=1&appKey=${encodeURIComponent(k)}"></scr`)} + 'ipt>');`);
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/api/status', (req, res) => res.json({
@@ -122,6 +132,40 @@ app.get('/api/region/:code', (req, res) => {
     region: { ...r, children: undefined }, parents, children,
     scores: scoreSrc && { from: scoreSrc.code, name: scoreSrc.name, cats: scoreSrc.cats, indicators: scoreSrc.indicators, total: scoreSrc.total, totalLabel: scoreSrc.totalLabel, totalHistory: scoreSrc.totalHistory, totalChanged: scoreSrc.totalChanged, good: scoreSrc.good, bad: scoreSrc.bad },
     band, apts: aptsFor(r, band),
+  });
+});
+
+// ── 단지 상세 (지도 + 실거래 내역) ──
+const sggCache = new Map(); // 시군구 실거래 원본 (최근 12곳)
+function sggRows(sgg) {
+  const ck = `${sgg}|${model.builtAt}`;
+  if (sggCache.has(ck)) return sggCache.get(ck);
+  const root = model.demo ? DEMO_ROOT : DATA;
+  const rows = [];
+  for (const ym of molit.listMonths('trade', sgg, root)) for (const r of molit.readMonth('trade', sgg, ym, root)) rows.push([ym, ...r]);
+  sggCache.set(ck, rows);
+  if (sggCache.size > 12) sggCache.delete(sggCache.keys().next().value);
+  return rows;
+}
+// rows: [월, 일, 법정동, 단지명, 단지ID, 전용㎡, 금액, 층, 건축년도, 지번]
+app.get('/api/apt', async (req, res) => {
+  if (!need(res)) return;
+  const sgg = String(req.query.sgg || ''), id = String(req.query.id || '').slice(0, 120);
+  if (!/^\d{5}$/.test(sgg) || !id || !model.regions[sgg]) return res.status(400).json({ error: '잘못된 요청이에요' });
+  const match = id.includes('/') && !/^\d/.test(id) ? (r) => `${r[2]}/${r[3]}` === id : (r) => r[4] === id;
+  const rows = sggRows(sgg).filter(match);
+  if (!rows.length) return res.status(404).json({ error: '이 단지의 거래를 찾지 못했어요' });
+  rows.sort((a, b) => b[0].localeCompare(a[0]) || (b[1] || 0) - (a[1] || 0));
+  const top = rows[0];
+  const jibun = (rows.find((r) => r[9]) || [])[9] || '';
+  const apt = { sgg, id, name: top[3], umd: top[2], built: top[8] || null, jibun, address: `${geo.regionName(sgg)} ${top[2]}${jibun ? ` ${jibun}` : ''}` };
+  let pos = null;
+  try { pos = model.demo ? geo.demoGeo(sgg, id) : await geo.geocode(apt); } catch (e) { console.error('[geo]', e.message); }
+  res.set('Cache-Control', 'private, max-age=300');
+  res.json({
+    demo: model.demo, apt, geo: pos, mapKey: geo.enabled(),
+    trades: rows.slice(0, 600).map((r) => ({ ym: r[0], day: r[1], area: r[5], price: r[6], floor: r[7], band: bandOf(r[5]) })),
+    total: rows.length,
   });
 });
 

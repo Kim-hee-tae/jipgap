@@ -145,3 +145,31 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .foot p { margin: 4px 0; }
 .meta .last { color: var(--text); font-weight: 600; }
 .rank .meta { white-space: normal; overflow: visible; }
+
+/* ── 단지 상세 (지도 + 실거래) ── */
+.rank li[data-apt] { cursor: pointer; }
+.rank li[data-apt]:hover .nm { text-decoration: underline; }
+.rank li[data-apt] .nm::after { content: " 📍"; font-size: 12px; }
+.sheet { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.45); display: flex; justify-content: center; align-items: flex-end; }
+.sheet-panel { background: var(--panel); width: 100%; max-width: 720px; max-height: 94vh; overflow: auto; border-radius: 20px 20px 0 0; padding-bottom: env(safe-area-inset-bottom); }
+@media (min-width: 760px) { .sheet { align-items: center; } .sheet-panel { border-radius: 20px; max-height: 90vh; } }
+.sheet-head { display: flex; align-items: flex-start; gap: 8px; padding: 18px 16px 10px 20px; position: sticky; top: 0; background: var(--panel); z-index: 2; }
+.sheet-title { flex: 1; min-width: 0; }
+.sheet-head h2 { font-size: 20px; margin: 0; line-height: 1.35; }
+.sheet-head .meta { white-space: normal; margin: 2px 0 0; }
+.apt-map-wrap { position: relative; margin: 0 16px; }
+.apt-map { height: 280px; border-radius: 14px; overflow: hidden; background: var(--soft); }
+.apt-map-msg { position: absolute; inset: 0; margin: 0; display: grid; place-items: center; text-align: center; padding: 20px; color: var(--sub); font-size: 14px; background: var(--soft); border-radius: 14px; }
+.apt-info { padding: 6px 20px 24px; }
+.band-chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 14px 0 6px; }
+.band-chips button { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 6px 12px; font-size: 13px; color: var(--sub); }
+.band-chips button[aria-pressed="true"] { background: var(--text); color: var(--panel); border-color: var(--text); }
+.apt-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0; text-align: center; }
+.apt-summary div { background: var(--soft); border-radius: 12px; padding: 10px 6px; }
+.apt-summary small { display: block; color: var(--faint); font-size: 12px; }
+.apt-summary b { font-size: 16px; }
+.trades { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 6px; }
+.trades th { text-align: left; color: var(--faint); font-weight: 500; font-size: 12px; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+.trades td { padding: 9px 4px; border-bottom: 1px solid var(--line); }
+.trades td.num, .trades th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.apt-label { background: var(--text); color: var(--panel); font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 8px; white-space: nowrap; box-shadow: 0 2px 6px rgba(0,0,0,.25); }

@@ -289,7 +289,7 @@
       <p class="eyebrow">실거래가 1년 변화</p>
       <h2>${esc(r.name)}에서 지난 1년<br>가장 많이 오른 ${sel} 아파트는?</h2>
       ${list.length ? `<ol class="rank">${list.slice(0, n).map((a, i) => `
-        <li>
+        <li data-sgg="${esc(a.sgg)}" data-apt="${esc(aptIdOf(a))}" tabindex="0" title="지도와 실거래 내역 보기">
           ${medal(i)}
           <div><div class="nm">${r.level === 'nation' || r.level === 'sido' ? `<span class="tag">${esc(regionName(a.sgg))}</span>` : ''}${esc(a.umd)} ${esc(a.name)}</div>
             <div class="meta">전용 ${a.area}㎡${a.built ? ` · ${now - a.built + 1}년차` : ''} · 거래 1년 전 ${a.nPast}건 · 최근 ${a.nRec}건</div>
@@ -302,6 +302,7 @@
       <p class="note">금액은 각 기간(최근 6개월 / 1년 전 6개월) 마지막 거래 3건의 중앙값이에요. 층·향에 따라 실제 시세와 다를 수 있어요.</p>
     </section>`;
   }
+  const aptIdOf = (a) => a.key.split('|').slice(1, -1).join('|'); // 시군구|단지ID|평형대 → 단지ID
   function regionName(code) { const r = S.regions.find((x) => x.code === code); return r ? r.full.replace(/^\S+\s/, '') : code; }
 
   // 4) 지표 모아보기
@@ -345,8 +346,158 @@
     }
   }
 
+  // ── 단지 상세: 지도 + 실거래 내역 ──
+  // 지도는 티맵(서버에 TMAP_APP_KEY 가 있으면 /tmap-loader.js 가 SDK 를 붙임), 없으면 Leaflet + OpenStreetMap
+  const MapView = (() => {
+    let kind = null, map = null, marker = null, leafletLoading = null;
+    const LEAFLET = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/';
+    function loadLeaflet() {
+      if (window.L) return Promise.resolve();
+      if (leafletLoading) return leafletLoading;
+      leafletLoading = new Promise((ok, fail) => {
+        const css = document.createElement('link');
+        css.rel = 'stylesheet'; css.href = `${LEAFLET}leaflet.min.css`;
+        document.head.appendChild(css);
+        const sc = document.createElement('script');
+        sc.src = `${LEAFLET}leaflet.min.js`;
+        sc.onload = ok;
+        sc.onerror = () => { leafletLoading = null; fail(new Error('지도를 불러오지 못했어요')); };
+        document.head.appendChild(sc);
+      });
+      return leafletLoading;
+    }
+    async function show(el, lat, lon, title) {
+      if (window.Tmapv2 && !window.TMAP_OFF) {
+        const pos = new Tmapv2.LatLng(lat, lon);
+        if (kind !== 'tmap') {
+          el.innerHTML = '';
+          map = new Tmapv2.Map(el.id, { center: pos, width: '100%', height: `${el.clientHeight || 280}px`, zoom: 16 });
+          kind = 'tmap';
+        } else {
+          if (typeof map.resize === 'function') map.resize(el.clientWidth, el.clientHeight || 280);
+          map.setCenter(pos); map.setZoom(16);
+        }
+        if (marker) marker.setMap(null);
+        marker = new Tmapv2.Marker({ position: pos, map, title });
+        return 'tmap';
+      }
+      await loadLeaflet();
+      if (kind !== 'leaflet') {
+        map = L.map(el, { zoomControl: true });
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+        kind = 'leaflet';
+      }
+      map.setView([lat, lon], 16);
+      setTimeout(() => map.invalidateSize(), 60);
+      if (marker) marker.remove();
+      marker = L.circleMarker([lat, lon], { radius: 9, color: '#fff', weight: 3, fillColor: '#e03131', fillOpacity: 1 })
+        .addTo(map).bindTooltip(esc(title), { permanent: true, direction: 'top', offset: [0, -10] });
+      return 'leaflet';
+    }
+    return { show };
+  })();
+
+  const A = { open: false, data: null, band: '전체', showAll: false, chart: null };
+  function mapMsg(text) { const m = $('#aptMapMsg'); m.textContent = text; m.hidden = !text; }
+  async function openApt(sgg, id, band) {
+    $('#aptSheet').hidden = false;
+    document.body.style.overflow = 'hidden';
+    if (!A.open) { history.pushState({ aptSheet: 1 }, ''); A.open = true; }
+    $('#aptTitle').textContent = '불러오는 중…';
+    $('#aptAddr').textContent = '';
+    $('#aptInfo').innerHTML = '';
+    mapMsg('');
+    try {
+      const d = await K.api(`/api/apt?sgg=${encodeURIComponent(sgg)}&id=${encodeURIComponent(id)}`);
+      if (!A.open) return;
+      A.data = d; A.showAll = false;
+      A.band = d.trades.some((t) => t.band === band) ? band : '전체';
+      renderApt();
+      if (!d.geo) mapMsg(d.mapKey ? '이 단지의 위치를 찾지 못했어요.' : '서버에 티맵 키(TMAP_APP_KEY)를 넣으면 지도에 위치가 표시돼요.');
+      else await MapView.show($('#aptMap'), d.geo.lat, d.geo.lon, `${d.apt.name}`).catch((e) => mapMsg(e.message));
+    } catch (e) {
+      $('#aptTitle').textContent = '단지 정보';
+      $('#aptInfo').innerHTML = `<p class="empty-card">${esc(e.message)}</p>`;
+    }
+  }
+  function closeApt(fromPop) {
+    if (!A.open) return;
+    A.open = false;
+    $('#aptSheet').hidden = true;
+    document.body.style.overflow = '';
+    if (A.chart) { A.chart.dispose(); A.chart = null; }
+    if (!fromPop) history.back();
+  }
+  window.addEventListener('popstate', () => { if (A.open) closeApt(true); }); // 폰 뒤로 가기 = 닫기
+  $('#aptClose').addEventListener('click', () => closeApt());
+  $('#aptSheet').addEventListener('click', (e) => { if (e.target.id === 'aptSheet') closeApt(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && A.open) closeApt(); });
+
+  const ymd = (t) => `${t.ym.slice(2, 4)}.${t.ym.slice(4)}${t.day ? `.${String(t.day).padStart(2, '0')}` : ''}`;
+  function renderApt() {
+    const d = A.data, a = d.apt, year = new Date().getFullYear();
+    $('#aptTitle').textContent = `${a.umd} ${a.name}`;
+    $('#aptAddr').textContent = [a.address, a.built ? `${a.built}년 준공 · ${year - a.built + 1}년차` : '', d.demo ? '데모 위치 (실제 위치 아님)' : '']
+      .filter(Boolean).join(' · ');
+    const bands = ['전체', ...S.data.meta.bands.filter((b) => d.trades.some((t) => t.band === b))];
+    const list = d.trades.filter((t) => A.band === '전체' || t.band === A.band);
+    const now = new Date();
+    const cut = `${now.getFullYear() - 1}${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const y1 = list.filter((t) => t.ym >= cut);
+    const last = list[0];
+    const max1 = y1.reduce((m, t) => (!m || t.price > m.price ? t : m), null);
+    const n = A.showAll ? list.length : Math.min(30, list.length);
+    $('#aptInfo').innerHTML = `
+      <div class="band-chips" role="group" aria-label="평형대">${bands.map((b) => `<button data-band="${esc(b)}" aria-pressed="${b === A.band}">${b}</button>`).join('')}</div>
+      <div class="apt-summary">
+        <div><small>최근 실거래</small><b>${last ? fmtEok(last.price) : '-'}</b><small>${last ? `${ymd(last)} · ${last.floor ?? '-'}층` : ''}</small></div>
+        <div><small>최근 1년 최고</small><b>${max1 ? fmtEok(max1.price) : '-'}</b><small>${max1 ? ymd(max1) : '거래 없음'}</small></div>
+        <div><small>최근 1년 거래</small><b>${y1.length}건</b><small>전체 ${list.length}건</small></div>
+      </div>
+      <div id="aptChart" class="chart small" role="img" aria-label="실거래가 추이"></div>
+      <table class="trades">
+        <thead><tr><th>계약일</th><th>전용면적</th><th class="num">층</th><th class="num">거래금액</th></tr></thead>
+        <tbody>${list.slice(0, n).map((t) => `<tr><td>${ymd(t)}</td><td>${t.area}㎡ <span class="meta">${t.band}</span></td><td class="num">${t.floor ?? '-'}</td><td class="num"><b>${fmtEok(t.price)}</b></td></tr>`).join('')}</tbody>
+      </table>
+      ${list.length > n ? `<button class="more" data-apt-more>${list.length - n}건 더 보기</button>` : ''}
+      ${d.total > d.trades.length ? `<p class="note">최근 ${d.trades.length}건까지만 보여요.</p>` : ''}
+      <p class="note">자료: 국토교통부 아파트 매매 실거래가 (해제된 거래 제외)</p>`;
+    drawAptChart(list);
+  }
+  function drawAptChart(list) {
+    if (A.chart) { A.chart.dispose(); A.chart = null; }
+    const el = $('#aptChart');
+    if (!el || !list.length || !window.echarts) return;
+    const COLORS = { '20평대 이하': '#8b5cf6', '20평대': '#31a26a', '30평대': '#3182f6', '40평대 이상': '#e8704a' };
+    const groups = {};
+    for (const t of list) (groups[t.band] = groups[t.band] || []).push(t);
+    A.chart = echarts.init(el);
+    A.chart.setOption({
+      grid: { left: 44, right: 10, top: 28, bottom: 26 },
+      legend: { top: 0, left: 0, itemWidth: 10, itemHeight: 10, textStyle: { color: css('--sub'), fontSize: 12 } },
+      tooltip: { trigger: 'item', formatter: (p) => { const t = p.data.t; return `${ymd(t)} · 전용 ${t.area}㎡ · ${t.floor ?? '-'}층<br><b>${fmtEok(t.price)}</b>`; } },
+      xAxis: { type: 'time', axisLabel: { color: css('--faint'), fontSize: 11 }, axisLine: { lineStyle: { color: css('--line') } }, splitLine: { show: false } },
+      yAxis: { type: 'value', scale: true, axisLabel: { color: css('--faint'), fontSize: 11, formatter: (v) => `${v}억` }, splitLine: { lineStyle: { color: css('--line') } } },
+      series: Object.entries(groups).map(([band, ts]) => ({
+        name: band, type: 'scatter', symbolSize: 7, itemStyle: { color: COLORS[band] || '#3182f6', opacity: 0.85 },
+        data: ts.map((t) => ({ value: [new Date(+t.ym.slice(0, 4), +t.ym.slice(4) - 1, t.day || 15), Math.round(t.price / 100) / 100], t })),
+      })),
+    });
+  }
+  $('#aptInfo').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-band]');
+    if (b) { A.band = b.dataset.band; A.showAll = false; return renderApt(); }
+    if (e.target.closest('[data-apt-more]')) { A.showAll = true; renderApt(); }
+  });
+
   // ── 클릭 위임 ──
+  $('#main').addEventListener('keydown', (e) => {
+    const ap = e.target.closest && e.target.closest('li[data-apt]');
+    if (ap && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openApt(ap.dataset.sgg, ap.dataset.apt, S.data.band); }
+  });
   $('#main').addEventListener('click', (e) => {
+    const ap = e.target.closest('li[data-apt]');
+    if (ap) return openApt(ap.dataset.sgg, ap.dataset.apt, S.data.band);
     const more = e.target.closest('[data-more]');
     if (more) {
       S.showAll[more.dataset.more] = true;
@@ -360,7 +511,7 @@
     if (ind) { const det = ind.querySelector('.detail'); det.hidden = !det.hidden; }
   });
   $('#main').addEventListener('change', (e) => { if (e.target.id === 'bandSel') loadApts(e.target.value).catch((err) => K.toast(err.message)); });
-  window.addEventListener('resize', () => charts.forEach((c) => c.resize()));
+  window.addEventListener('resize', () => { charts.forEach((c) => c.resize()); if (A.chart) A.chart.resize(); });
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => S.data && render());
 
   // ── 시작 ──
