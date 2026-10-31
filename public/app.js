@@ -418,7 +418,7 @@
       A.data = d; A.showAll = false;
       A.band = d.trades.some((t) => t.band === band) ? band : '전체';
       renderApt();
-      if (!d.geo) mapMsg(d.mapKey ? '이 단지의 위치를 찾지 못했어요.' : '서버에 티맵 키(TMAP_APP_KEY)를 넣으면 지도에 위치가 표시돼요.');
+      if (!d.geo) mapMsg(d.geoError || (d.mapKey ? `티맵 검색에서 「${d.apt.umd} ${d.apt.name}」을(를) 찾지 못했어요.` : '서버에 티맵 키(TMAP_APP_KEY)를 넣으면 지도에 위치가 표시돼요.'));
       else await MapView.show($('#aptMap'), d.geo.lat, d.geo.lon, `${d.apt.name}`).catch((e) => mapMsg(e.message));
     } catch (e) {
       $('#aptTitle').textContent = '단지 정보';

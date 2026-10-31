@@ -96,7 +96,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/api/status', (req, res) => res.json({
   ok: true, ready: Boolean(model), demo: model ? model.demo : null, refYm: model?.refYm || null,
-  builtAt: model?.builtAt || null, updating: Boolean(updating), lastRun: state.data.lastRun && { ...state.data.lastRun, log: undefined },
+  builtAt: model?.builtAt || null, updating: Boolean(updating), tmap: { key: geo.enabled(), lastError: geo.lastError() }, lastRun: state.data.lastRun && { ...state.data.lastRun, log: undefined },
 }));
 
 const need = (res) => { if (!model) { res.status(503).json({ error: '데이터를 준비하고 있어요. 1~2분 뒤 다시 열어 주세요.', preparing: true }); return false; } return true; };
@@ -160,11 +160,11 @@ app.get('/api/apt', async (req, res) => {
   const top = rows[0];
   const jibun = (rows.find((r) => r[9]) || [])[9] || '';
   const apt = { sgg, id, name: top[3], umd: top[2], built: top[8] || null, jibun, address: `${geo.regionName(sgg)} ${top[2]}${jibun ? ` ${jibun}` : ''}` };
-  let pos = null;
-  try { pos = model.demo ? geo.demoGeo(sgg, id) : await geo.geocode(apt); } catch (e) { console.error('[geo]', e.message); }
+  let pos = null, geoError = null;
+  try { pos = model.demo ? geo.demoGeo(sgg, id) : await geo.geocode(apt); } catch (e) { geoError = e.geoError ? e.message : '위치 검색 중 오류가 났어요'; }
   res.set('Cache-Control', 'private, max-age=300');
   res.json({
-    demo: model.demo, apt, geo: pos, mapKey: geo.enabled(),
+    demo: model.demo, apt, geo: pos, geoError, mapKey: geo.enabled(),
     trades: rows.slice(0, 600).map((r) => ({ ym: r[0], day: r[1], area: r[5], price: r[6], floor: r[7], band: bandOf(r[5]), direct: r[10] === '직', rgst: r[11] || null, known: Boolean(r[10]) })),
     total: rows.length, calc,
   });
