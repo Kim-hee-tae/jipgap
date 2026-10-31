@@ -57,6 +57,19 @@ const { compact } = require('../lib/molit');
   assert(d.body.trades.length > 0 && d.body.geo && d.body.geo.lat, '단지 거래·위치');
   assert(d.body.trades.every((t, i, arr) => i === 0 || arr[i - 1].ym >= t.ym), '최신순');
   assert(d.body.trades.some((t) => t.rgst) && d.body.trades.every((t) => typeof t.direct === 'boolean'), '등기·직거래 필드');
+  // 계산 과정이 순위 숫자와 똑같은지 (여러 시군구 단지 전부)
+  let checked = 0;
+  for (const code of ['11470', '11680', '41135', '26350']) {
+    for (const band of ['20평대', '30평대']) {
+      const list = (await get(`/api/region/${code}?band=${encodeURIComponent(band)}`)).body.apts;
+      for (const a of list) {
+        const c = (await get(`/api/apt?sgg=${a.sgg}&id=${encodeURIComponent(a.key.split('|').slice(1, -1).join('|'))}`)).body.calc[a.band];
+        assert.deepStrictEqual([c.change, c.recent.price, c.past.price, c.recent.n, c.past.n], [a.change, a.price, a.pricePast, a.nRec, a.nPast], `${a.name} ${a.band} 계산 과정 불일치`);
+        checked++;
+      }
+    }
+  }
+  assert(checked > 20, `확인한 단지 ${checked}개`);
   assert.strictEqual((await get('/api/apt?sgg=11470&id=없는단지')).status, 404);
   assert.strictEqual((await get('/api/apt?sgg=abc&id=x')).status, 400);
   const loader = await fetch('http://127.0.0.1:3098/tmap-loader.js').then((x) => x.text());

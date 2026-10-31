@@ -452,6 +452,9 @@
     const last = list[0];
     const max1 = y1.reduce((m, t) => (!m || t.price > m.price ? t : m), null);
     const n = A.showAll ? list.length : Math.min(30, list.length);
+    const calc = A.band !== '전체' && d.calc ? d.calc[A.band] : null;
+    const usedKey = (t) => `${t.ym}|${t.day}|${t.floor}|${t.price}|${t.area}`;
+    const used = new Set(calc ? [...(calc.recent?.used || []), ...(calc.past?.used || [])].map(usedKey) : []);
     $('#aptInfo').innerHTML = `
       <div class="band-chips" role="group" aria-label="평형대">${bands.map((b) => `<button data-band="${esc(b)}" aria-pressed="${b === A.band}">${b}</button>`).join('')}</div>
       <div class="apt-summary">
@@ -459,16 +462,44 @@
         <div><small>최근 1년 최고</small><b>${max1 ? fmtEok(max1.price) : '-'}</b><small>${max1 ? ymd(max1) : '거래 없음'}</small></div>
         <div><small>최근 1년 거래</small><b>${y1.length}건</b><small>전체 ${list.length}건</small></div>
       </div>
+      ${calcBox(calc)}
       <div id="aptChart" class="chart small" role="img" aria-label="실거래가 추이"></div>
       <table class="trades">
         <thead><tr><th>계약일</th><th>전용면적</th><th class="num">층</th><th class="num">거래금액</th></tr></thead>
-        <tbody>${list.slice(0, n).map((t) => `<tr><td>${ymd(t)}</td><td>${t.area}㎡ <span class="meta">${t.band}</span></td><td class="num">${t.floor ?? '-'}</td><td class="num"><b>${fmtEok(t.price)}</b><div class="badges">${tradeBadges(t)}</div></td></tr>`).join('')}</tbody>
+        <tbody>${list.slice(0, n).map((t) => `<tr${used.has(usedKey(t)) ? ' class="used" title="상승률 계산에 쓴 거래"' : ''}><td>${ymd(t)}</td><td>${t.area}㎡ <span class="meta">${t.band}</span></td><td class="num">${t.floor ?? '-'}</td><td class="num"><b>${fmtEok(t.price)}</b><div class="badges">${tradeBadges(t)}</div></td></tr>`).join('')}</tbody>
       </table>
       ${list.length > n ? `<button class="more" data-apt-more>${list.length - n}건 더 보기</button>` : ''}
       ${d.total > d.trades.length ? `<p class="note">최근 ${d.trades.length}건까지만 보여요.</p>` : ''}
       <p class="note">${d.trades.some((t) => t.direct) ? '차트의 빈 점은 직거래예요. ' : ''}등기는 소유권 이전 등기까지 마친 거래예요. 자료: 국토교통부 아파트 매매 실거래가 (해제된 거래 제외)</p>
       ${d.trades.some((t) => !t.known) ? '<p class="note">등기·직거래 표시는 다시 받은 거래부터 보여요 (며칠 안에 모두 채워져요).</p>' : ''}`;
     drawAptChart(list);
+  }
+  // 계산 과정: 1년 전 / 최근 → 가운데 값 → 상승률
+  const ymDot = (ym) => `${ym.slice(2, 4)}.${ym.slice(4)}`;
+  function calcPart(title, p) {
+    if (!p) return `<div class="calc-part"><b>${title}</b><p class="meta">이 기간 자료가 아직 없어요.</p></div>`;
+    const how = p.used.length >= 3 ? '마지막 3건의 가운데 값' : p.used.length === 2 ? '2건뿐이라 두 값의 평균' : p.used.length === 1 ? '1건뿐이라 그 값' : '';
+    return `<div class="calc-part">
+      <div class="calc-h"><b>${title}</b> <span class="meta">${ymDot(p.from)}~${ymDot(p.to)} · 거래 ${p.n}건${p.n > 3 ? ' 중 마지막 3건' : ''}</span></div>
+      ${p.used.length ? `<ol class="calc-list">${p.used.map((t) => `<li><span>${ymd(t)} · ${t.floor ?? '-'}층 · ${t.area}㎡ ${tradeBadges(t)}</span><span class="num">${fmtEok(t.price)}<small>평당 ${fmtEok(t.ppp)}</small></span></li>`).join('')}</ol>
+      <div class="calc-res"><span>→ ${how}</span><b>${fmtEok(p.price)}</b></div>` : '<p class="meta">이 기간에는 거래가 없어요.</p>'}
+    </div>`;
+  }
+  function calcBox(c) {
+    if (A.band === '전체') return '<p class="note">평형대를 고르면 상승률 계산 과정이 보여요.</p>';
+    if (!c) return '';
+    const ok = c.change !== null;
+    return `<section class="calc">
+      <h3>계산 과정 · ${esc(A.band)} <span class="meta">기준월 ${ymDot(c.refYm)}</span></h3>
+      ${calcPart('1년 전', c.past)}
+      ${calcPart('최근', c.recent)}
+      ${ok ? `<div class="calc-sum">
+        <div><span>상승률 (평당가로 계산)</span><b class="${dir(c.change)}">${fmtPct(c.change)}</b></div>
+        <p class="meta">평당 ${fmtEok(c.recent.ppp)} ÷ 평당 ${fmtEok(c.past.ppp)} − 1. 같은 평형대라도 전용면적이 조금씩 달라서 평당가로 비교해요.</p>
+        <div><span>금액 차이</span><b>${fmtEok(c.recent.price)} − ${fmtEok(c.past.price)} = ${fmtEok(c.diff)}</b></div>
+        ${c.past.n < 3 || c.recent.n < 3 ? `<p class="warn">한 기간의 거래가 3건 미만이라 믿을 만한 정도가 낮아요. 전국·시도 순위에는 나오지 않아요.</p>` : ''}
+      </div>` : `<p class="meta">두 기간 모두 거래가 2건 이상이어야 상승률을 계산해요.</p>`}
+    </section>`;
   }
   function drawAptChart(list) {
     if (A.chart) { A.chart.dispose(); A.chart = null; }

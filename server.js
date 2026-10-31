@@ -7,7 +7,7 @@ const { fork } = require('child_process');
 const express = require('express');
 const { mountVersion, sendIndex } = require('./kit/server/version');
 const { createStore } = require('./kit/server/json-store');
-const { DATA, readJson, kstDate } = require('./lib/util');
+const { DATA, PYEONG, readJson, kstDate, median } = require('./lib/util');
 const { MODEL_FILE, BUILD_VER, bandOf } = require('./lib/build');
 const molit = require('./lib/molit');
 const { DEMO_ROOT } = require('./lib/demo');
@@ -155,6 +155,7 @@ app.get('/api/apt', async (req, res) => {
   const match = id.includes('/') && !/^\d/.test(id) ? (r) => `${r[2]}/${r[3]}` === id : (r) => r[4] === id;
   const rows = sggRows(sgg).filter(match);
   if (!rows.length) return res.status(404).json({ error: '이 단지의 거래를 찾지 못했어요' });
+  const calc = calcSteps(rows); // 정렬 전 (파일 순서) — 집계와 같은 순서로 계산
   rows.sort((a, b) => b[0].localeCompare(a[0]) || (b[1] || 0) - (a[1] || 0));
   const top = rows[0];
   const jibun = (rows.find((r) => r[9]) || [])[9] || '';
@@ -165,9 +166,55 @@ app.get('/api/apt', async (req, res) => {
   res.json({
     demo: model.demo, apt, geo: pos, mapKey: geo.enabled(),
     trades: rows.slice(0, 600).map((r) => ({ ym: r[0], day: r[1], area: r[5], price: r[6], floor: r[7], band: bandOf(r[5]), direct: r[10] === '직', rgst: r[11] || null, known: Boolean(r[10]) })),
-    total: rows.length,
+    total: rows.length, calc,
   });
 });
+
+// 순위의 1년 상승률을 집계(lib/build.js)와 똑같이 다시 계산해 과정까지 돌려준다
+//   기간: 최근 6개월(기준월 포함) / 1년 전 6개월, 각 기간 계약일 순 마지막 3건의 가운데 값
+//   상승률은 평당가 가운데 값끼리, 금액 차이는 금액 가운데 값끼리
+const LAST_N = 3;
+function calcSteps(rows) {
+  const { months, ref } = model;
+  const idx = new Map(months.map((m, i) => [m, i]));
+  const range = (from, to) => (to < 0 ? null : { from: months[Math.max(0, from)], to: months[to], lo: Math.max(0, from), hi: to });
+  const recentR = range(ref - 5, ref), pastR = range(ref - 17, ref - 12);
+  const out = {};
+  for (const band of model.bands) {
+    const list = [];
+    for (const r of rows) {
+      const area = r[5], i = idx.get(r[0]);
+      if (!area || area < 10 || i === undefined || bandOf(area) !== band) continue;
+      const ppp = r[6] / (area / PYEONG);
+      if (!Number.isFinite(ppp) || ppp <= 0) continue;
+      list.push({ i, ym: r[0], day: r[1] || 0, area, price: r[6], floor: r[7], ppp, direct: r[10] === '직', rgst: r[11] || null });
+    }
+    if (!list.length) continue;
+    list.sort((a, b) => a.i - b.i || a.day - b.day); // 안정 정렬 → 집계와 같은 순서
+    const part = (R) => {
+      if (!R) return null;
+      const all = list.filter((t) => t.i >= R.lo && t.i <= R.hi);
+      const used = all.slice(-LAST_N);
+      return {
+        from: R.from, to: R.to, n: all.length,
+        used: used.map(({ i, ...t }) => ({ ...t, ppp: Math.round(t.ppp) })),
+        price: used.length ? Math.round(median(used.map((t) => t.price))) : null,
+        ppp: used.length ? Math.round(median(used.map((t) => t.ppp))) : null,
+        pppRaw: used.length ? median(used.map((t) => t.ppp)) : null,
+      };
+    };
+    const recent = part(recentR), past = part(pastR);
+    const ok = recent && past && recent.n >= 2 && past.n >= 2;
+    out[band] = {
+      refYm: months[ref], recent, past,
+      change: ok ? Math.round((recent.pppRaw / past.pppRaw - 1) * 1000) / 10 : null,
+      diff: ok ? recent.price - past.price : null,
+      inNationalRank: ok && recent.n >= 3 && past.n >= 3,
+    };
+  }
+  for (const c of Object.values(out)) for (const p of [c.recent, c.past]) if (p) delete p.pppRaw;
+  return out;
+}
 
 app.use('/api', (req, res) => res.status(404).json({ error: '없는 주소예요' }));
 
