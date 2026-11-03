@@ -70,6 +70,12 @@ const { compact } = require('../lib/molit');
     }
   }
   assert(checked > 20, `확인한 단지 ${checked}개`);
+  // 검색: 지역 + 아파트
+  const sr = (await get(`/api/search?q=${encodeURIComponent('양천')}`)).body;
+  assert(sr.regions.some((x) => x.code === '11470'), '지역 검색');
+  const sa = (await get(`/api/search?q=${encodeURIComponent('데모 2단지')}`)).body;
+  assert(sa.apts.length > 0 && sa.apts[0].id && sa.apts[0].sgg, '아파트 검색');
+  assert.deepStrictEqual((await get('/api/search?q=')).body, { regions: [], apts: [] });
   assert.strictEqual((await get('/api/apt?sgg=11470&id=없는단지')).status, 404);
   assert.strictEqual((await get('/api/apt?sgg=abc&id=x')).status, 400);
   const loader = await fetch('http://127.0.0.1:3098/tmap-loader.js').then((x) => x.text());

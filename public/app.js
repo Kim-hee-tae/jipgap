@@ -67,36 +67,110 @@
     if (lv === 'sgg') return go(sgg || favOf('sgg') || (r && r.level === 'sido' && d.children[0] ? d.children[0].code : '11680'));
   }));
 
-  // ── 검색 ──
-  const q = $('#q'), sug = $('#suggest');
-  let sugItems = [], sugIdx = 0;
-  const norm = (s) => s.replace(/\s+/g, '').toLowerCase();
-  q.addEventListener('input', () => {
-    const t = norm(q.value);
-    if (!t) { sug.hidden = true; return; }
-    const order = { sido: 0, sgg: 1, dong: 2, nation: 3 };
-    sugItems = S.regions.filter((r) => norm(r.full).includes(t) || norm(r.name).startsWith(t))
-      .sort((a, b) => (norm(a.name).startsWith(t) ? 0 : 1) - (norm(b.name).startsWith(t) ? 0 : 1) || order[a.level] - order[b.level])
-      .slice(0, 10);
-    sugIdx = 0;
-    drawSug();
-  });
-  function drawSug() {
-    sug.innerHTML = sugItems.length
-      ? sugItems.map((r, i) => `<li role="option" data-code="${esc(r.code)}" aria-selected="${i === sugIdx}"><span>${esc(r.full)}</span><span class="lv">${LEVEL_NAME[r.level]}</span></li>`).join('')
-      : '<li class="lv">찾는 지역이 없어요</li>';
-    sug.hidden = false;
+  // ── 지역 선택 팝업: 왼쪽 시도 · 오른쪽 시군구, 위쪽 검색칸 (지역 + 아파트) ──
+  const P = { open: false, sido: '00', pick: '00', seq: 0, timer: null };
+  const sidoName = (code) => (S.regions.find((r) => r.code === code) || {}).name || '';
+  const shortSido = (full) => full.replace(/특별시|광역시|특별자치시|특별자치도/g, '');
+  function openPicker() {
+    const r = S.data && S.data.region;
+    // 지금 보고 있는 지역에 맞춰 처음 선택
+    if (!r || r.level === 'nation') { P.sido = '00'; P.pick = '00'; }
+    else if (r.level === 'sido') { P.sido = r.code; P.pick = r.code; }
+    else { const sgg = r.level === 'sgg' ? r.code : r.parent; P.sido = sgg.slice(0, 2); P.pick = sgg; }
+    $('#pq').value = '';
+    showResults(false);
+    drawPicker();
+    $('#regionSheet').hidden = false;
+    document.body.style.overflow = 'hidden';
+    if (!P.open) { history.pushState({ picker: 1 }, ''); P.open = true; }
+    const sel = $('#sggCol [aria-selected="true"]') || $('#sidoCol [aria-selected="true"]');
+    if (sel) sel.scrollIntoView({ block: 'center' });
   }
-  q.addEventListener('keydown', (e) => {
-    if (sug.hidden || !sugItems.length) return;
-    if (e.key === 'ArrowDown') { sugIdx = (sugIdx + 1) % sugItems.length; drawSug(); e.preventDefault(); }
-    else if (e.key === 'ArrowUp') { sugIdx = (sugIdx - 1 + sugItems.length) % sugItems.length; drawSug(); e.preventDefault(); }
-    else if (e.key === 'Enter') { pick(sugItems[sugIdx].code); e.preventDefault(); }
-    else if (e.key === 'Escape') sug.hidden = true;
+  function closePicker(fromPop) {
+    if (!P.open) return;
+    P.open = false;
+    $('#regionSheet').hidden = true;
+    document.body.style.overflow = '';
+    if (!fromPop) history.back();
+  }
+  function drawPicker() {
+    const sidos = S.regions.filter((r) => r.level === 'sido');
+    $('#sidoCol').innerHTML = [{ code: '00', name: '전국' }, ...sidos]
+      .map((r) => `<li role="option" data-sido="${esc(r.code)}" aria-selected="${r.code === P.sido}">${esc(r.name)}</li>`).join('');
+    if (P.sido === '00') {
+      $('#sggCol').innerHTML = `<li role="option" data-pick="00" aria-selected="true">전국 전체</li>`;
+    } else {
+      const sggs = S.regions.filter((r) => r.level === 'sgg' && r.code.slice(0, 2) === P.sido).sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+      $('#sggCol').innerHTML = [{ code: P.sido, name: '전체' }, ...sggs]
+        .map((r) => `<li role="option" data-pick="${esc(r.code)}" aria-selected="${r.code === P.pick}">${esc(r.name)}</li>`).join('');
+    }
+    const name = P.pick === '00' ? '전국' : P.pick.length === 2 ? sidoName(P.pick) : (S.regions.find((r) => r.code === P.pick) || {}).name;
+    $('#pickerGo').textContent = `${name || '선택한 지역'} 보기`;
+  }
+  $('#openPicker').addEventListener('click', () => {
+    if (!S.regions.length) return K.toast('지역 목록을 불러오는 중이에요');
+    openPicker();
   });
-  sug.addEventListener('mousedown', (e) => { const li = e.target.closest('li[data-code]'); if (li) { e.preventDefault(); pick(li.dataset.code); } });
-  q.addEventListener('blur', () => setTimeout(() => { sug.hidden = true; }, 120));
-  function pick(code) { sug.hidden = true; q.value = ''; q.blur(); go(code); }
+  $('#sidoCol').addEventListener('click', (e) => {
+    const li = e.target.closest('[data-sido]');
+    if (!li) return;
+    P.sido = li.dataset.sido; P.pick = P.sido;
+    drawPicker();
+    $('#sggCol').scrollTop = 0;
+  });
+  $('#sggCol').addEventListener('click', (e) => {
+    const li = e.target.closest('[data-pick]');
+    if (!li) return;
+    if (P.pick === li.dataset.pick) return finishPick(P.pick); // 한 번 더 누르면 바로 이동
+    P.pick = li.dataset.pick;
+    drawPicker();
+  });
+  $('#pickerGo').addEventListener('click', () => finishPick(P.pick));
+  $('#pickerClose').addEventListener('click', () => closePicker());
+  $('#regionSheet').addEventListener('click', (e) => { if (e.target.id === 'regionSheet') closePicker(); });
+  function finishPick(code) {
+    closePicker(true);
+    // 팝업이 쌓아 둔 기록 자리를 새 지역 주소로 바꿈 → 뒤로 가기 한 번이면 이전 지역
+    location.replace(`#/r/${encodeURIComponent(code)}`);
+  }
+
+  // 검색칸: 글자를 넣으면 목록 대신 검색 결과
+  function showResults(on) { $('#pickerResults').hidden = !on; $('#pickerCols').hidden = on; }
+  $('#pq').addEventListener('input', () => {
+    clearTimeout(P.timer);
+    const q = $('#pq').value.trim();
+    if (!q) { showResults(false); return; }
+    P.timer = setTimeout(() => search(q), 180);
+  });
+  async function search(q) {
+    const seq = ++P.seq;
+    let d;
+    try { d = await K.api(`/api/search?q=${encodeURIComponent(q)}`); } catch (e) { d = { regions: [], apts: [], error: e.message }; }
+    if (seq !== P.seq) return;
+    showResults(true);
+    const reg = d.regions.map((r) => `<li data-region="${esc(r.code)}"><span>${esc(r.full)}</span><span class="lv">${LEVEL_NAME[r.level]}</span></li>`).join('');
+    const apt = d.apts.map((a) => `<li data-sgg="${esc(a.sgg)}" data-apt="${esc(a.id)}" data-band="${esc(a.band)}">
+        <span><b>${esc(a.name)}</b><small>${esc(a.region)} ${esc(a.umd)}</small></span>
+        <span class="lv">${a.last ? `${fmtEok(a.last.price)}<small>${a.last.ym.slice(2, 4)}.${a.last.ym.slice(4)} 실거래</small>` : '아파트'}</span></li>`).join('');
+    $('#pickerResults').innerHTML = (reg ? `<h4>지역</h4><ul>${reg}</ul>` : '') + (apt ? `<h4>아파트</h4><ul>${apt}</ul>` : '')
+      || `<p class="empty-card">${esc(d.error || `「${q}」에 맞는 지역이나 아파트가 없어요.`)}</p>`;
+  }
+  $('#pq').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    const first = $('#pickerResults li[data-region], #pickerResults li[data-apt]');
+    if (first) first.click();
+  });
+  $('#pickerResults').addEventListener('click', (e) => {
+    const r = e.target.closest('[data-region]');
+    if (r) return finishPick(r.dataset.region);
+    const a = e.target.closest('[data-apt]');
+    if (a) {
+      // 아파트: 그 시군구로 이동한 뒤 단지 상세 열기
+      const { sgg, apt, band } = a.dataset;
+      finishPick(sgg);
+      setTimeout(() => openApt(sgg, apt, band), 50);
+    }
+  });
 
   // ── 관심 지역 ──
   $('#star').addEventListener('click', async () => {
@@ -433,10 +507,10 @@
     if (A.chart) { A.chart.dispose(); A.chart = null; }
     if (!fromPop) history.back();
   }
-  window.addEventListener('popstate', () => { if (A.open) closeApt(true); }); // 폰 뒤로 가기 = 닫기
+  window.addEventListener('popstate', () => { if (A.open) closeApt(true); if (P.open) closePicker(true); }); // 폰 뒤로 가기 = 닫기
   $('#aptClose').addEventListener('click', () => closeApt());
   $('#aptSheet').addEventListener('click', (e) => { if (e.target.id === 'aptSheet') closeApt(); });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && A.open) closeApt(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (A.open) closeApt(); else if (P.open) closePicker(); } });
 
   const ymd = (t) => `${t.ym.slice(2, 4)}.${t.ym.slice(4)}${t.day ? `.${String(t.day).padStart(2, '0')}` : ''}`;
   function renderApt() {

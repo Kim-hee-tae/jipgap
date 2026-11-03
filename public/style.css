@@ -202,3 +202,28 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .calc .warn { margin: 8px 0 0; font-size: 12px; color: var(--s2); }
 .trades tr.used td { background: var(--down-soft); }
 .trades tr.used td:first-child { box-shadow: inset 3px 0 0 var(--down); }
+
+/* ── 지역 선택 팝업 ── */
+.search-btn { width: 100%; border: 0; text-align: left; cursor: pointer; padding: 13px 14px; font-size: 16px; }
+.search-btn span { color: var(--faint); }
+.picker { display: flex; flex-direction: column; height: min(88vh, 760px); padding: 16px 16px calc(14px + env(safe-area-inset-bottom)); overflow: hidden; }
+.picker-search { display: flex; align-items: center; gap: 8px; background: var(--soft); border-radius: 14px; padding: 0 14px; color: var(--faint); flex: none; }
+.picker-search input { flex: 1; border: 0; background: none; padding: 13px 0; font: inherit; font-size: 16px; color: var(--text); outline: none; min-width: 0; }
+.picker-cols { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; margin-top: 12px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.picker-cols[hidden] { display: none; }
+.picker-col { list-style: none; margin: 0; padding: 0; overflow-y: auto; overscroll-behavior: contain; }
+.picker-col + .picker-col { border-left: 1px solid var(--line); }
+.picker-col li { padding: 15px 8px; text-align: center; color: var(--sub); cursor: pointer; }
+.picker-col li:hover { background: var(--soft); }
+.picker-col li[aria-selected="true"] { background: var(--soft); color: var(--accent); font-weight: 700; }
+.picker-results { flex: 1; min-height: 0; overflow-y: auto; margin-top: 8px; }
+.picker-results h4 { margin: 12px 4px 4px; font-size: 13px; color: var(--faint); font-weight: 600; }
+.picker-results ul { list-style: none; margin: 0; padding: 0; }
+.picker-results li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 11px 8px; border-radius: 10px; cursor: pointer; }
+.picker-results li:hover { background: var(--soft); }
+.picker-results li small { display: block; color: var(--faint); font-size: 12px; font-weight: 400; }
+.picker-results .lv { color: var(--sub); font-size: 13px; text-align: right; white-space: nowrap; flex: none; }
+.picker-foot { display: grid; grid-template-columns: 88px 1fr; gap: 10px; margin-top: 12px; flex: none; }
+.btn-sub, .btn-main { border: 0; border-radius: 14px; padding: 15px 10px; font-weight: 700; font-size: 16px; }
+.btn-sub { background: var(--soft); color: var(--text); }
+.btn-main { background: var(--accent); color: #fff; }

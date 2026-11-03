@@ -28,11 +28,10 @@
       <button role="tab" data-tab="sido">시도</button>
       <button role="tab" data-tab="sgg">시군구</button>
     </div>
-    <div class="search">
+    <button id="openPicker" class="search search-btn" aria-haspopup="dialog">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-      <input id="q" type="search" placeholder="지역 검색 (예: 강남구, 분당구, 대치동)" autocomplete="off" aria-label="지역 검색">
-      <ul id="suggest" class="suggest" role="listbox" hidden></ul>
-    </div>
+      <span id="pickerLabel">지역·아파트 검색</span>
+    </button>
     <div id="favs" class="favs"></div>
   </header>
 
@@ -50,6 +49,24 @@
       </div>
       <div class="apt-map-wrap"><div id="aptMap" class="apt-map"></div><p id="aptMapMsg" class="apt-map-msg" hidden></p></div>
       <div id="aptInfo" class="apt-info"></div>
+    </div>
+  </div>
+
+  <div id="regionSheet" class="sheet" hidden role="dialog" aria-modal="true" aria-label="지역 선택">
+    <div class="sheet-panel picker">
+      <div class="picker-search">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input id="pq" type="search" placeholder="지역이나 아파트를 검색해 보세요" autocomplete="off" aria-label="지역·아파트 검색">
+      </div>
+      <div id="pickerCols" class="picker-cols">
+        <ul id="sidoCol" class="picker-col" role="listbox" aria-label="시도"></ul>
+        <ul id="sggCol" class="picker-col" role="listbox" aria-label="시군구"></ul>
+      </div>
+      <div id="pickerResults" class="picker-results" hidden></div>
+      <div class="picker-foot">
+        <button id="pickerClose" class="btn-sub">닫기</button>
+        <button id="pickerGo" class="btn-main">보기</button>
+      </div>
     </div>
   </div>
 

@@ -20,6 +20,8 @@ const UPDATE_HOUR = Number(process.env.UPDATE_HOUR ?? 6); // 매일 06시(한국
 // ── 데이터 (model.json 을 메모리에) ──
 let model = null;
 let searchList = [];
+let aptIndex = []; // 아파트 이름 검색용 (단지 하나에 한 줄)
+const norm = (s) => String(s || '').replace(/\s+/g, '').toLowerCase();
 function loadModel() {
   const m = readJson(MODEL_FILE);
   if (!m || !m.regions) return false;
@@ -27,7 +29,21 @@ function loadModel() {
   searchList = Object.values(m.regions)
     .filter((r) => r.level !== 'dong' || r.trades6m >= 3)
     .map((r) => ({ code: r.code, name: r.name, full: r.full, level: r.level }));
-  console.log(`[model] ${m.demo ? '데모' : '실데이터'} · 기준월 ${m.refYm} · 지역 ${searchList.length}곳`);
+  const seen = new Map();
+  for (const list of Object.values(m.aptsBySgg || {})) {
+    for (const a of list) {
+      const id = a.key.split('|').slice(1, -1).join('|');
+      const k = `${a.sgg}|${id}`;
+      const prev = seen.get(k);
+      // 평형대가 여러 개면 거래가 가장 많은 평형대를 대표로
+      if (!prev || a.nRec > prev.nRec) {
+        seen.set(k, { sgg: a.sgg, id, name: a.name, umd: a.umd, band: a.band, nRec: a.nRec, last: a.last || null,
+          region: (m.regions[a.sgg]?.full || '').replace(/특별시|광역시|특별자치시|특별자치도/g, ''), key: norm(`${a.umd}${a.name}`) });
+      }
+    }
+  }
+  aptIndex = [...seen.values()];
+  console.log(`[model] ${m.demo ? '데모' : '실데이터'} · 기준월 ${m.refYm} · 지역 ${searchList.length}곳 · 단지 ${aptIndex.length}곳`);
   return true;
 }
 loadModel();
@@ -105,6 +121,25 @@ app.get('/api/regions', (req, res) => {
   if (!need(res)) return;
   res.set('Cache-Control', 'public, max-age=300');
   res.json({ regions: searchList });
+});
+
+// 지역·아파트 검색 (팝업 검색칸)
+app.get('/api/search', (req, res) => {
+  if (!need(res)) return;
+  const q = norm(req.query.q).slice(0, 40);
+  if (!q) return res.json({ regions: [], apts: [] });
+  const order = { sido: 0, sgg: 1, dong: 2, nation: 3 };
+  const regions = searchList
+    .filter((r) => norm(r.full).includes(q) || norm(r.name).startsWith(q))
+    .sort((a, b) => (norm(a.name).startsWith(q) ? 0 : 1) - (norm(b.name).startsWith(q) ? 0 : 1) || order[a.level] - order[b.level])
+    .slice(0, 8);
+  const apts = aptIndex
+    .filter((a) => a.key.includes(q) || norm(a.name).includes(q))
+    .sort((a, b) => (norm(a.name).startsWith(q) ? 0 : 1) - (norm(b.name).startsWith(q) ? 0 : 1) || b.nRec - a.nRec)
+    .slice(0, 20)
+    .map(({ key, ...a }) => a);
+  res.set('Cache-Control', 'public, max-age=120');
+  res.json({ regions, apts });
 });
 
 // 하위 지역 요약 (트리맵·순위용)
